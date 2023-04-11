@@ -5,60 +5,78 @@ import com.opencsv.bean.CsvToBean;
 import com.opencsv.bean.CsvToBeanBuilder;
 import org.apache.commons.lang3.tuple.MutableTriple;
 
-import com.opencsv.CSVReader;
 import org.springframework.stereotype.Component;
 
 import java.io.*;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 
 
 /**
- *
+ * Service that
  */
 @Component
 public class CsvParserService {
 
+    CsvCustomExceptionHandler exceptionHandler = new CsvCustomExceptionHandler();
+
     /**
-     * parses csv file from given filepath
+     * Parses the CSV file at the specified path.
      *
-     * @param filePath
-     * @throws Exception
+     * @param filePath The path to the CSV file.
+     * @throws Exception If there is an error reading the CSV file.
      */
-    public void parse(String filePath) throws Exception {
+    public List<Employee> parse(String filePath) throws Exception {
         File file = new File(filePath);
         List<Employee> users;
-        CsvValidator validator = new CsvValidator();
-        CsvCustomExceptionHandler exceptionHandler = new CsvCustomExceptionHandler();
 
         try (Reader reader = new BufferedReader(new FileReader(file))) {
             CsvToBean<Employee> csvToBean = new CsvToBeanBuilder(reader)
                     .withType(Employee.class)
                     .withIgnoreLeadingWhiteSpace(true)
-                    .withVerifier(validator)
                     .withExceptionHandler(exceptionHandler)
                     .build();
 
             // convert `CsvToBean` object to list of users
             users = csvToBean.parse();
-
-            System.out.printf("Number of errors: %s \nLines with error:\n%s%s",
-                    (validator.getList().size() + exceptionHandler.getList().size()),
-                    Arrays.toString(validator.getList().toArray()).replace("[", "").replace("],", "\n").replace("]", "\n"),
-                    Arrays.deepToString(exceptionHandler.getList().toArray()).replace(" ", "").replace("[", "").replace("],", "\n").replace("]", "\n")
-            );
-
-            System.out.println("Average salary per employee:");
-            users.stream()
-                    .collect(Collectors
-                            .groupingBy(e -> new MutableTriple<Long, String, String>(e.getEmpId(), e.getFirstName(), e.getLastName()), Collectors.averagingDouble(Employee::getSalary)))
-                    .forEach((k, v) -> System.out.printf("%s %s: %.1f EUR\n", k.getMiddle(), k.getRight(), v));
+            return users;
 
         } catch (FileNotFoundException | RuntimeException e) {
             System.out.println(e.toString());
         }
-
-
+        return null;
     }
+
+    /**
+     * Prints a list of Employee objects grouped by their id with their sorted calculated average salery and errors if any occurred.
+     *
+     * @param filePath The path to the CSV file.
+     * @throws Exception If there is an error reading the CSV file.
+     */
+    public void print(String filePath) throws Exception {
+        List<Employee> users = this.parse(filePath);
+        if (users != null) {
+            if (exceptionHandler.getList().size() > 0) {
+                System.out.printf("Number of errors: %s\nLines with error:\n%s",
+                        (exceptionHandler.getList().size()),
+                        Arrays.deepToString(exceptionHandler.getList().toArray()).replace(" ", "").replace("[", "").replace("],", "\n").replace("]", "\n")
+                );
+            } else {
+                System.out.println("No errors in CSV file found!");
+            }
+
+            if (users.size() > 0) {
+                System.out.println("Average salary per employee:");
+                users.stream()
+                        .collect(Collectors.groupingBy(e -> new MutableTriple<Long, String, String>(e.getEmpId(), e.getFirstName(), e.getLastName()), Collectors.averagingDouble(Employee::getSalary)))
+                        .entrySet().stream()
+                        .sorted(Map.Entry.comparingByValue())
+                        .forEach((entry) -> System.out.printf("%s %s: %.1f EUR\n", entry.getKey().getMiddle(), entry.getKey().getRight(), entry.getValue()));
+            } else {
+                System.out.println("No valid Users found in CSV File");
+            }
+        }
+    }
+
+
 }
